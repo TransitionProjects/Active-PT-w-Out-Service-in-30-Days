@@ -23,7 +23,7 @@ def create_activity_report():
     )
     entries_df = pd.read_excel(file, sheet_name="EntryData")
     services_df = pd.read_excel(file, sheet_name="ServiceData")
-    today = datetime.today().date
+    today = datetime.today()
 
     # sort and slice the services data frame so that it only shows the most
     # recent service
@@ -32,7 +32,7 @@ def create_activity_report():
         ascending=False
     ).dropna(
         how="any",
-        subset="Service Provide Start Date"
+        subset=["Service Provide Start Date"]
     ).drop_duplicates(
         subset="Client Unique Id",
         keep="first"
@@ -53,10 +53,22 @@ def create_activity_report():
     # add days_since_service column to the joined data frame
     joined_df["Days Since Service"] = (
         joined_df["Today"] - joined_df["Service Provide Start Date"]
-    ).days
+    ).dt.days
+
+    # create a dataframe for only participants with a service prior to entry but
+    # not since entry
+    no_service = joined_df[joined_df["Days Since Service"] < 0]
+
+    # refactor the days since entry column
+    no_service["Days Since Service"] = (
+        no_service["Today"] - no_service["Entry Exit Entry Date"]
+    ).dt.days
+
+    # concat the no_service and joined_df data frames
+    concat = pd.concat([joined_df, no_service], ignore_index=True).reindex()
 
     # create a data frame containing only required output columns
-    final = joined_df[[
+    final = concat[[
         "Client Uid",
         "Entry Exit Provider Id",
         "Entry Exit Entry Date",
@@ -66,7 +78,7 @@ def create_activity_report():
 
     # create a data frame that contains rows with Days Since Service values
     # greater than 29
-    flagged = final[final["Days Since Service"] > 29]
+    flagged = final[(final["Days Since Service"] > 29)]
 
     # write the data frames to excel
     writer = pd.ExcelWriter(
@@ -85,3 +97,6 @@ def create_activity_report():
 
     # exit and return true
     return True
+
+if __name__ == "__main__":
+    create_activity_report()
